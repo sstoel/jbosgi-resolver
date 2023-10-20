@@ -47,7 +47,7 @@ import org.jboss.osgi.resolver.XResource;
 import org.jboss.osgi.resolver.XResource.State;
 import org.jboss.osgi.resolver.XWiring;
 import org.jboss.osgi.resolver.XWiringSupport;
-import org.omg.CORBA.Environment;
+//import org.omg.CORBA.Environment;
 import org.osgi.framework.namespace.HostNamespace;
 import org.osgi.framework.wiring.BundleCapability;
 import org.osgi.framework.wiring.BundleRequirement;
