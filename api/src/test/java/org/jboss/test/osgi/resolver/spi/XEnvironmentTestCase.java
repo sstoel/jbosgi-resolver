@@ -22,7 +22,9 @@ package org.jboss.test.osgi.resolver.spi;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.jboss.osgi.resolver.XEnvironment;
 import org.jboss.osgi.resolver.XRequirement;
@@ -70,5 +72,35 @@ public class XEnvironmentTestCase extends AbstractTestBase {
         assertEquals(2, providers.size());
         assertSame(resourceB, providers.get(0).getResource());
         assertSame(resourceC, providers.get(1).getResource());
+    }
+
+    @Test
+    public void testFindProvidersWithoutNamespaceAttribute() throws Exception {
+
+        // A capability that has no attribute with the name of the namespace
+        Map<String, Object> atts = new HashMap<String, Object>();
+        atts.put("osgi.native.osname", "Linux");
+        atts.put("osgi.native.processor", "x86-64");
+        XResourceBuilder<XResource> builderA = XResourceBuilderFactory.create();
+        builderA.addCapability(IdentityNamespace.IDENTITY_NAMESPACE, "testA");
+        builderA.addCapability("osgi.native", atts, null);
+        XResource resourceA = builderA.getResource();
+
+        // The filter attributes start with the name of the namespace
+        Map<String, String> dirs = new HashMap<String, String>();
+        dirs.put("filter", "(&(osgi.native.osname~=linux)(osgi.native.processor~=x86-64))");
+        XResourceBuilder<XResource> builderB = XResourceBuilderFactory.create();
+        builderB.addCapability(IdentityNamespace.IDENTITY_NAMESPACE, "testB");
+        builderB.addRequirement("osgi.native", null, dirs);
+        XResource resourceB = builderB.getResource();
+
+        XEnvironment env = installResources(resourceA, resourceB);
+
+        List<Requirement> reqs = resourceB.getRequirements("osgi.native");
+        assertEquals(1, reqs.size());
+
+        List<Capability> providers = env.findProviders(reqs.get(0));
+        assertEquals(1, providers.size());
+        assertSame(resourceA, providers.get(0).getResource());
     }
 }

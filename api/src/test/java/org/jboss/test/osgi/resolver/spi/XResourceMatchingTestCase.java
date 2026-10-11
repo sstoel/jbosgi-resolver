@@ -70,4 +70,43 @@ public class XResourceMatchingTestCase extends AbstractTestBase {
 
         Assert.assertTrue("Match", req.matches(cap));
     }
+
+    @Test
+    public void testMandatoryAttributesMatch() throws Exception {
+        XCapability cap = createMandatoryCapability();
+
+        XResourceBuilder<XResource> rbuilder = XResourceBuilderFactory.create();
+        rbuilder.addCapability(IdentityNamespace.IDENTITY_NAMESPACE, "res2");
+        Filter filter = FrameworkUtil.createFilter("(&(osgi.wiring.bundle=org.jboss.test.cases.repository.tb1)(attr1=a)(attr2=b))");
+        XRequirement req = rbuilder.addRequirement("osgi.wiring.bundle", filter);
+        rbuilder.getResource();
+
+        Assert.assertTrue("Match", req.matches(cap));
+    }
+
+    @Test
+    public void testMandatoryAttributesNoMatch() throws Exception {
+        XCapability cap = createMandatoryCapability();
+
+        // The filter does not use attr1, only an attribute that starts with that name
+        XResourceBuilder<XResource> rbuilder = XResourceBuilderFactory.create();
+        rbuilder.addCapability(IdentityNamespace.IDENTITY_NAMESPACE, "res2");
+        Filter filter = FrameworkUtil.createFilter("(&(osgi.wiring.bundle=org.jboss.test.cases.repository.tb1)(attr10=c)(attr2=b))");
+        XRequirement req = rbuilder.addRequirement("osgi.wiring.bundle", filter);
+        rbuilder.getResource();
+
+        Assert.assertFalse("No match", req.matches(cap));
+    }
+
+    private XCapability createMandatoryCapability() {
+        XResourceBuilder<XResource> cbuilder = XResourceBuilderFactory.create();
+        cbuilder.addCapability(IdentityNamespace.IDENTITY_NAMESPACE, "res1");
+        XCapability cap = cbuilder.addCapability(BundleNamespace.BUNDLE_NAMESPACE, "org.jboss.test.cases.repository.tb1");
+        cap.getAttributes().put("attr1", "a");
+        cap.getAttributes().put("attr2", "b");
+        cap.getAttributes().put("attr10", "c");
+        cap.getDirectives().put("mandatory", "attr1, attr2");
+        cbuilder.getResource();
+        return cap;
+    }
 }

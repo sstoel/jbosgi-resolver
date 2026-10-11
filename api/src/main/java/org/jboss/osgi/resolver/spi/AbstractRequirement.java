@@ -146,6 +146,10 @@ public class AbstractRequirement extends AbstractElement implements XHostRequire
         if (filter != null) {
             String filterstr = filter.toString();
             int index = filterstr.indexOf("(" + attrname);
+            // Skip attributes that only start with the given name, like 'osgi.native.osname' for 'osgi.native'
+            while (index >= 0 && "~<=>".indexOf(filterstr.charAt(index + attrname.length() + 1)) < 0) {
+                index = filterstr.indexOf("(" + attrname, index + 1);
+            }
             if (index >= 0) {
                 index += attrname.length() + 1;
                 char ch = filterstr.charAt(index);
@@ -259,7 +263,10 @@ public class AbstractRequirement extends AbstractElement implements XHostRequire
         // match mandatory attributes on the capability
         String dirstr = ((XCapability) cap).getDirective(Constants.MANDATORY_DIRECTIVE);
         if (dirstr != null) {
-            for (String attname : dirstr.split("[,\\s]")) {
+            for (String attname : dirstr.split("[,\\s]+")) {
+                if (attname.isEmpty()) {
+                    continue;
+                }
                 String attval = getValueFromFilter(filter, attname, null);
                 if (attval == null) {
                     return false;
