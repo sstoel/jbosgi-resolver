@@ -243,17 +243,6 @@ public class AbstractResourceBuilder<T extends XResource> implements XResourceBu
                         capatts.put(Constants.BUNDLE_SYMBOLICNAME_ATTRIBUTE, symbolicName);
                     if (!capatts.containsKey(Constants.BUNDLE_VERSION_ATTRIBUTE))
                         capatts.put(Constants.BUNDLE_VERSION_ATTRIBUTE, bundleVersion);
-                    if (!capatts.containsKey(Constants.PACKAGE_SPECIFICATION_VERSION)) {
-                        Object vspec = capatts.get(Constants.VERSION_ATTRIBUTE);
-                        if (vspec != null) {
-                            try {
-                                Version version = Version.parseVersion(vspec.toString());
-                                capatts.put(Constants.PACKAGE_SPECIFICATION_VERSION, version);
-                            } catch (RuntimeException ex) {
-                                // ignore
-                            }
-                        }
-                    }
                 }
             }
 

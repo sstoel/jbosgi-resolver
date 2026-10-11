@@ -330,6 +330,12 @@ public class AbstractRequirement extends AbstractElement implements XHostRequire
         if (atts.containsKey(namespace)) {
             addAttributePart(atts, namespace, parts);
             addVersionRangePart(atts, Constants.BUNDLE_VERSION_ATTRIBUTE, parts);
+            // The deprecated specification-version attribute of an import is a synonym of the version attribute
+            if (PACKAGE_NAMESPACE.equals(namespace)) {
+                Object specVersion = atts.remove(Constants.PACKAGE_SPECIFICATION_VERSION);
+                if (specVersion != null && atts.containsKey(Constants.VERSION_ATTRIBUTE) == false)
+                    atts.put(Constants.VERSION_ATTRIBUTE, specVersion);
+            }
             addVersionRangePart(atts, Constants.VERSION_ATTRIBUTE, parts);
             for (String key : new ArrayList<String>(atts.keySet())) {
                 addAttributePart(atts, key, parts);
