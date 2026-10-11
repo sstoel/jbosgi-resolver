@@ -191,6 +191,9 @@ public class AbstractWiring implements XWiring {
                 Object capval = cap.getAttributes().get(capns);
                 for (Wire wire : required) {
                     Capability wirecap = wire.getCapability();
+                    // A requirement that is wired to this capability itself does not substitute it
+                    if (wirecap == cap)
+                        continue;
                     Object wirecapval = wirecap.getAttributes().get(wirecap.getNamespace());
                     if (capns.equals(wirecap.getNamespace()) && capval.equals(wirecapval)) {
                         capit.remove();

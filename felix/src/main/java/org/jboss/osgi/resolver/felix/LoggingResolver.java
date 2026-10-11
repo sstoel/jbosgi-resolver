@@ -45,10 +45,17 @@ public final class LoggingResolver extends ResolverImpl {
 
     @Override
     public Map<Resource, List<Wire>> resolve(ResolveContext context) throws ResolutionException {
-        Collection<Resource> mandatory = context.getMandatoryResources();
-        Collection<Resource> optional = context.getOptionalResources();
-        LOGGER.debugf("Resolve: %s, %s", mandatory, optional);
-        Map<Resource, List<Wire>> result = super.resolve(context);
+        // The resolver must call ResolveContext.onCancel before any other method of the context
+        Map<Resource, List<Wire>> result;
+        try {
+            result = super.resolve(context);
+        } finally {
+            if (LOGGER.isDebugEnabled()) {
+                Collection<Resource> mandatory = context.getMandatoryResources();
+                Collection<Resource> optional = context.getOptionalResources();
+                LOGGER.debugf("Resolve: %s, %s", mandatory, optional);
+            }
+        }
         if (LOGGER.isDebugEnabled()) {
             LOGGER.debugf("Resolution result: %d", result.size());
             for (Map.Entry<Resource, List<Wire>> entry : result.entrySet()) {

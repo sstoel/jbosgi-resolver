@@ -18,9 +18,8 @@
  */
 package org.apache.felix.resolver.util;
 
-import java.util.concurrent.CopyOnWriteArraySet;
-
-public class OpenHashMapSet<K, V> extends OpenHashMap<K, CopyOnWriteArraySet<V>> {
+public class OpenHashMapSet<K, V> extends OpenHashMap<K, CopyOnWriteSet<V>> {
+    private static final long serialVersionUID = 1L;
 
     public OpenHashMapSet() {
         super();
@@ -30,20 +29,21 @@ public class OpenHashMapSet<K, V> extends OpenHashMap<K, CopyOnWriteArraySet<V>>
         super(initialCapacity);
     }
 
+    @SuppressWarnings("unchecked")
     public OpenHashMapSet<K, V> deepClone() {
         OpenHashMapSet<K, V> copy = (OpenHashMapSet<K, V>) super.clone();
         Object[] values = copy.value;
         for (int i = values.length; i-- > 0;) {
             if (values[i] != null) {
-                values[i] = new CopyOnWriteArraySet<V>((CopyOnWriteArraySet<V>) values[i]);
+                values[i] = new CopyOnWriteSet<V>((CopyOnWriteSet<V>) values[i]);
             }
         }
         return copy;
     }
 
     @Override
-    protected CopyOnWriteArraySet<V> compute(K key) {
-        return new CopyOnWriteArraySet<V>();
+    protected CopyOnWriteSet<V> compute(K key) {
+        return new CopyOnWriteSet<V>();
     }
 
 }

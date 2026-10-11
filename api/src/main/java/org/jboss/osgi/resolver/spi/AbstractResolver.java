@@ -43,6 +43,7 @@ import org.osgi.resource.Capability;
 import org.osgi.resource.Requirement;
 import org.osgi.resource.Resource;
 import org.osgi.resource.Wire;
+import org.osgi.resource.Wiring;
 import org.osgi.service.resolver.ResolutionException;
 import org.osgi.service.resolver.ResolveContext;
 import org.osgi.service.resolver.Resolver;
@@ -87,6 +88,11 @@ public class AbstractResolver implements XResolver {
     @Override
     public Map<Resource, List<Wire>> resolve(ResolveContext resolveContext) throws ResolutionException {
         return delegate.resolve(resolveContext);
+    }
+
+    @Override
+    public Map<Resource, List<Wire>> resolveDynamic(ResolveContext resolveContext, Wiring hostWiring, Requirement dynamicRequirement) throws ResolutionException {
+        return delegate.resolveDynamic(resolveContext, hostWiring, dynamicRequirement);
     }
 
     @Override

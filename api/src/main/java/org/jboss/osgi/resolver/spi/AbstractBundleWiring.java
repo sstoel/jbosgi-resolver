@@ -152,7 +152,11 @@ public class AbstractBundleWiring extends AbstractWiring implements XBundleWirin
         }
         List<BundleWire> providedWires = new ArrayList<BundleWire>();
         for (Wire wire : super.getProvidedResourceWires(namespace)) {
-            providedWires.add((BundleWire) wire);
+            // A wire stays with the provider after the requirer wiring is no longer in use
+            BundleWire bwire = (BundleWire) wire;
+            if (bwire.getRequirerWiring() != null) {
+                providedWires.add(bwire);
+            }
         }
         return Collections.unmodifiableList(providedWires);
     }
