@@ -26,6 +26,9 @@ import org.jboss.osgi.resolver.XResourceBuilder;
 import org.jboss.osgi.resolver.XResourceBuilderFactory;
 import org.junit.Assert;
 import org.junit.Test;
+import org.osgi.framework.namespace.PackageNamespace;
+import org.osgi.framework.Version;
+import org.osgi.framework.Constants;
 import org.osgi.framework.Filter;
 import org.osgi.framework.FrameworkUtil;
 import org.osgi.framework.namespace.BundleNamespace;
@@ -96,6 +99,29 @@ public class XResourceMatchingTestCase extends AbstractTestBase {
         rbuilder.getResource();
 
         Assert.assertFalse("No match", req.matches(cap));
+    }
+
+    @Test
+    public void testSpecificationVersion() throws Exception {
+        // The deprecated specification-version is a synonym of version, for the export and for the import
+        XResourceBuilder<XResource> cbuilder = XResourceBuilderFactory.create();
+        cbuilder.addCapability(IdentityNamespace.IDENTITY_NAMESPACE, "res1");
+        XCapability cap = cbuilder.addCapability(PackageNamespace.PACKAGE_NAMESPACE, "org.acme.foo");
+        cap.getAttributes().put(Constants.PACKAGE_SPECIFICATION_VERSION, "1.2");
+        cbuilder.getResource();
+
+        Assert.assertEquals(Version.parseVersion("1.2"), cap.getAttribute(PackageNamespace.CAPABILITY_VERSION_ATTRIBUTE));
+
+        XResourceBuilder<XResource> rbuilder = XResourceBuilderFactory.create();
+        rbuilder.addCapability(IdentityNamespace.IDENTITY_NAMESPACE, "res2");
+        XRequirement req = rbuilder.addRequirement(PackageNamespace.PACKAGE_NAMESPACE, "org.acme.foo");
+        req.getAttributes().put(Constants.PACKAGE_SPECIFICATION_VERSION, "1.2");
+        XRequirement tooHigh = rbuilder.addRequirement(PackageNamespace.PACKAGE_NAMESPACE, "org.acme.foo");
+        tooHigh.getAttributes().put(Constants.PACKAGE_SPECIFICATION_VERSION, "1.3");
+        rbuilder.getResource();
+
+        Assert.assertTrue("Match", req.matches(cap));
+        Assert.assertFalse("No match", tooHigh.matches(cap));
     }
 
     private XCapability createMandatoryCapability() {

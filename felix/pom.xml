@@ -33,6 +33,7 @@
         <version>7.8.0.Final</version>
     </parent>
 
+    <!-- The sources in org.apache.felix.resolver are an unmodified copy of Apache Felix Resolver 2.0.4 -->
     <name>JBossOSGi Resolver Felix</name>
     <artifactId>jbosgi-resolver-felix</artifactId>
     <packaging>jar</packaging>

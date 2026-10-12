@@ -39,6 +39,7 @@ import org.jboss.osgi.resolver.XPackageCapability;
 import org.jboss.osgi.resolver.XProvidedCapability;
 import org.jboss.osgi.resolver.XResource;
 import org.jboss.osgi.resolver.XResourceCapability;
+import org.osgi.framework.Constants;
 import org.osgi.framework.Version;
 import org.osgi.framework.namespace.IdentityNamespace;
 import org.osgi.resource.Capability;
@@ -129,6 +130,10 @@ public class AbstractCapability extends AbstractElement implements XIdentityCapa
                 if (namespaceValue == null)
                     throw MESSAGES.illegalStateCannotObtainAttribute(getNamespace());
             } else if (PACKAGE_NAMESPACE.equals(getNamespace())) {
+                // The deprecated specification-version attribute of an export is a synonym of the version attribute
+                Object specVersion = getAttribute(Constants.PACKAGE_SPECIFICATION_VERSION);
+                if (specVersion != null && getAttribute(CAPABILITY_VERSION_ATTRIBUTE) == null)
+                    attributes.getAttributes().put(CAPABILITY_VERSION_ATTRIBUTE, specVersion);
                 version = getVersion(this, CAPABILITY_VERSION_ATTRIBUTE);
                 attributes.getAttributes().put(CAPABILITY_VERSION_ATTRIBUTE, version);
                 namespaceValue = (String) getAttribute(getNamespace());
