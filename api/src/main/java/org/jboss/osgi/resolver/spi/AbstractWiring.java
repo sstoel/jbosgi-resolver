@@ -35,6 +35,7 @@ import org.jboss.osgi.resolver.XResource;
 import org.jboss.osgi.resolver.XWire;
 import org.jboss.osgi.resolver.XWiring;
 import org.osgi.framework.namespace.HostNamespace;
+import org.osgi.framework.namespace.PackageNamespace;
 import org.osgi.resource.Capability;
 import org.osgi.resource.Namespace;
 import org.osgi.resource.Requirement;
@@ -186,16 +187,20 @@ public class AbstractWiring implements XWiring {
 
             // A package declared to be both exported and imported,
             // only one is selected and the other is discarded
-            if (!removed) {
-                String capns = cap.getNamespace();
-                Object capval = cap.getAttributes().get(capns);
-                for (Wire wire : required) {
+            // This only applies to packages, a capability in another namespace is not substituted
+            if (!removed && PackageNamespace.PACKAGE_NAMESPACE.equals(cap.getNamespace())) {
+                Object capval = cap.getAttributes().get(PackageNamespace.PACKAGE_NAMESPACE);
+                List<Wire> requiredWires;
+                synchronized (required) {
+                    requiredWires = new ArrayList<Wire>(required);
+                }
+                for (Wire wire : requiredWires) {
                     Capability wirecap = wire.getCapability();
                     // A requirement that is wired to this capability itself does not substitute it
                     if (wirecap == cap)
                         continue;
-                    Object wirecapval = wirecap.getAttributes().get(wirecap.getNamespace());
-                    if (capns.equals(wirecap.getNamespace()) && capval.equals(wirecapval)) {
+                    Object wirecapval = wirecap.getAttributes().get(PackageNamespace.PACKAGE_NAMESPACE);
+                    if (PackageNamespace.PACKAGE_NAMESPACE.equals(wirecap.getNamespace()) && capval != null && capval.equals(wirecapval)) {
                         capit.remove();
                         removed = true;
                         break;
