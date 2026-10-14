@@ -95,6 +95,17 @@ public class AbstractWiring implements XWiring {
         }
     }
 
+    /**
+     * Remove a wire of a requirer wiring that was discarded.
+     */
+    public void removeProvidedWire(Wire wire) {
+        synchronized (this) {
+            List<Wire> nswires = provided.get(wire.getCapability().getNamespace());
+            if (nswires != null)
+                nswires.remove(wire);
+        }
+    }
+
     @Override
     public void addProvidedWire(Wire wire) {
         synchronized (this) {

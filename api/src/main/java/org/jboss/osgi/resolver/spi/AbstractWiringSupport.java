@@ -25,6 +25,8 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import org.jboss.osgi.resolver.XWiring;
 import org.jboss.osgi.resolver.XWiringSupport;
+import org.osgi.resource.Wire;
+import org.osgi.resource.Wiring;
 
 /**
  * The abstract implementation of an {@link XWiringSupport}.
@@ -60,8 +62,22 @@ public class AbstractWiringSupport extends AbstractElement implements XWiringSup
         this.wiring.set(wiring);
     }
 
+    /**
+     * Discard the wiring. Its wires are removed from the provider wirings, which would keep it otherwise.
+     */
     @Override
     public void refresh() {
-        wiring.set(null);
+        XWiring discarded = wiring.getAndSet(null);
+        if (discarded != null) {
+            for (Wire wire : discarded.getRequiredResourceWires(null)) {
+                Wiring providerWiring = null;
+                if (wire instanceof AbstractBundleWire)
+                    providerWiring = ((AbstractBundleWire) wire).getProviderWiring(false);
+                else if (wire instanceof AbstractWire)
+                    providerWiring = ((AbstractWire) wire).getProviderWiring();
+                if (providerWiring instanceof AbstractWiring)
+                    ((AbstractWiring) providerWiring).removeProvidedWire(wire);
+            }
+        }
     }
 }
