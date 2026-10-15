@@ -50,6 +50,7 @@ import org.jboss.osgi.resolver.XWiringSupport;
 import org.osgi.framework.namespace.HostNamespace;
 import org.osgi.framework.wiring.BundleCapability;
 import org.osgi.framework.wiring.BundleRequirement;
+import org.osgi.framework.wiring.BundleWiring;
 import org.osgi.resource.Capability;
 import org.osgi.resource.Requirement;
 import org.osgi.resource.Resource;
@@ -123,11 +124,17 @@ public class AbstractEnvironment implements XEnvironment, Cloneable {
             // Add resource by type
             getCachedResources(icap.getType()).add(res);
 
-            // Add resource capabilites
-            for (Capability cap : res.getCapabilities(null)) {
-                CacheKey cachekey = CacheKey.create(cap);
-                getCachedCapabilities(cachekey).add(cap);
-                LOGGER.debugf("   %s", cap);
+            // Add resource capabilites, a resource that cannot be installed is removed again
+            try {
+                for (Capability cap : res.getCapabilities(null)) {
+                    for (CacheKey cachekey : CacheKey.createAll(cap)) {
+                        getCachedCapabilities(cachekey).add(cap);
+                    }
+                    LOGGER.debugf("   %s", cap);
+                }
+            } catch (RuntimeException ex) {
+                removeCachedResource(res, index);
+                throw ex;
             }
             if (LOGGER.isDebugEnabled()) {
                 for (Requirement req : res.getRequirements(null)) {
@@ -157,19 +164,7 @@ public class AbstractEnvironment implements XEnvironment, Cloneable {
 
             LOGGER.debugf("Uninstall resource: %s", res);
 
-            // Remove resource by type
-            XIdentityCapability icap = res.getIdentityCapability();
-            getCachedResources(icap.getType()).remove(res);
-
-            // Remove resource capabilities
-            for (Capability cap : res.getCapabilities(null)) {
-                CacheKey cachekey = CacheKey.create(cap);
-                Set<Capability> cachecaps = getCachedCapabilities(cachekey);
-                cachecaps.remove(cap);
-                if (cachecaps.isEmpty()) {
-                    capabilityCache.remove(cachekey);
-                }
-            }
+            removeCachedResource(res, null);
 
             // Remove wirings
             res.getWiringSupport().refresh();
@@ -214,9 +209,16 @@ public class AbstractEnvironment implements XEnvironment, Cloneable {
     }
 
     @Override
-    public synchronized List<Capability> findProviders(Requirement req) {
+    public List<Capability> findProviders(Requirement req) {
         if (req == null)
             throw MESSAGES.illegalArgumentNull("req");
+
+        // The resolver hooks are foreign code, they are called without the monitor of the environment
+        List<Capability> result = findProvidersLocked(req);
+        return filterByHooks(req, result);
+    }
+
+    private synchronized List<Capability> findProvidersLocked(Requirement req) {
 
         XRequirement xreq = (XRequirement) req;
         CacheKey cachekey = CacheKey.create(req);
@@ -229,9 +231,9 @@ public class AbstractEnvironment implements XEnvironment, Cloneable {
                 XCapability xcap = (XCapability) cap;
                 XResource capres = xcap.getResource();
 
-                // Do not allow new wires to unresolved resources
+                // Do not allow new wires to resources that are removed, unless they are removal pending: resolved and in use
                 XWiringSupport wiringSupport = capres.getWiringSupport();
-                if (!wiringSupport.isEffective()) {
+                if (!wiringSupport.isEffective() && !isRemovalPendingInUse(capres)) {
                     continue;
                 }
 
@@ -279,7 +281,10 @@ public class AbstractEnvironment implements XEnvironment, Cloneable {
                 }
             }
         }
+        return result;
+    }
 
+    private List<Capability> filterByHooks(Requirement req, List<Capability> result) {
         // Filter the matches by calling the registered {@link ResolverHook}s
         ResolverHookProcessor hookregs = getCurrentProcessor();
         if (hookregs != null && req instanceof BundleRequirement) {
@@ -348,7 +353,11 @@ public class AbstractEnvironment implements XEnvironment, Cloneable {
     public synchronized Map<Resource, Wiring> getWirings() {
         Map<Resource, Wiring> result = new HashMap<Resource, Wiring>();
         for (XResource res : resourceIndexCache.values()) {
+            // The wirings of removal pending resources that are in use are part of the existing wirings, the wirings of
+            // other resources may depend on them
             Wiring wiring = res.getWiringSupport().getWiring(true);
+            if (wiring == null && isRemovalPendingInUse(res))
+                wiring = res.getWiringSupport().getWiring(false);
             if (wiring != null) {
                 result.put(res, wiring);
             }
@@ -356,11 +365,39 @@ public class AbstractEnvironment implements XEnvironment, Cloneable {
         return Collections.unmodifiableMap(result);
     }
 
+    // A resource that is not effective any more, but resolved and still in use
+    private static boolean isRemovalPendingInUse(XResource res) {
+        XWiringSupport wiringSupport = res.getWiringSupport();
+        if (wiringSupport.isEffective())
+            return false;
+        Wiring wiring = wiringSupport.getWiring(false);
+        return wiring instanceof BundleWiring && ((BundleWiring) wiring).isInUse();
+    }
+
     private XWiring createWiring(XResource res, List<Wire> required, List<Wire> provided) {
         if (res instanceof XBundleRevision) {
             return new AbstractBundleWiring((XBundleRevision) res, required, provided);
         } else {
             return new AbstractWiring(res, required, provided);
+        }
+    }
+
+    // Remove the resource by type and its capabilities from the caches, and from the index if given
+    private void removeCachedResource(XResource res, Long index) {
+        if (index != null)
+            resourceIndexCache.remove(index);
+        XIdentityCapability icap = res.getIdentityCapability();
+        getCachedResources(icap.getType()).remove(res);
+        for (Capability cap : res.getCapabilities(null)) {
+            for (CacheKey cachekey : CacheKey.createAll(cap)) {
+                Set<Capability> cachecaps = capabilityCache.get(cachekey);
+                if (cachecaps != null) {
+                    cachecaps.remove(cap);
+                    if (cachecaps.isEmpty()) {
+                        capabilityCache.remove(cachekey);
+                    }
+                }
+            }
         }
     }
 
@@ -379,7 +416,9 @@ public class AbstractEnvironment implements XEnvironment, Cloneable {
             capset = new LinkedHashSet<Capability>();
             // do not add this to the capabilityCache
         }
-        if (capset.isEmpty() && (key.value == null || key.hasFuzzyOperator())) {
+        // Without a namespace value every capability of the namespace is a candidate, also those with another value
+        if (key.value == null || key.hasFuzzyOperator()) {
+            capset = new LinkedHashSet<Capability>();
             for (Entry<CacheKey, Set<Capability>> entry : capabilityCache.entrySet()) {
                 CacheKey auxkey = entry.getKey();
                 if (auxkey.namespace.equals(key.namespace)) {
@@ -407,9 +446,24 @@ public class AbstractEnvironment implements XEnvironment, Cloneable {
         private final String operator;
 
         static CacheKey create(Capability cap) {
+            return createAll(cap).get(0);
+        }
+
+        // A capability with several namespace values is found by each of them
+        static List<CacheKey> createAll(Capability cap) {
             String namespace = cap.getNamespace();
-            String nsvalue = (String) cap.getAttributes().get(namespace);
-            return new CacheKey(namespace, nsvalue, null);
+            Object nsvalue = cap.getAttributes().get(namespace);
+            List<CacheKey> keys = new ArrayList<CacheKey>();
+            if (nsvalue instanceof Collection && !((Collection<?>) nsvalue).isEmpty()) {
+                for (Object aux : (Collection<?>) nsvalue) {
+                    CacheKey key = new CacheKey(namespace, aux != null ? aux.toString() : null, null);
+                    if (!keys.contains(key))
+                        keys.add(key);
+                }
+            } else {
+                keys.add(new CacheKey(namespace, nsvalue != null ? nsvalue.toString() : null, null));
+            }
+            return keys;
         }
 
         static CacheKey create(Requirement req) {
@@ -417,7 +471,35 @@ public class AbstractEnvironment implements XEnvironment, Cloneable {
             StringBuffer opbuffer = new StringBuffer();
             String nsvalue = AbstractRequirement.getNamespaceValue(req, opbuffer);
             String operator = opbuffer.length() > 0 ? opbuffer.toString() : null;
+            // The capabilities of the namespace value can only be looked up when every matching capability has that value,
+            // otherwise all capabilities of the namespace must be considered
+            if (nsvalue != null && !isRequiredEquality(AbstractRequirement.getFilterFromDirective(req).toString(), namespace, operator, nsvalue)) {
+                nsvalue = null;
+            }
             return new CacheKey(namespace, nsvalue, operator);
+        }
+
+        // True if the first namespace attribute of the filter is a plain equality that is not nested in an OR or NOT
+        private static boolean isRequiredEquality(String filterstr, String namespace, String operator, String nsvalue) {
+            if (!"=".equals(operator) || nsvalue.indexOf('*') >= 0 || nsvalue.indexOf('\\') >= 0) {
+                return false;
+            }
+            String term = "(" + namespace + "=";
+            StringBuilder enclosing = new StringBuilder();
+            for (int i = 0; i < filterstr.length(); i++) {
+                char ch = filterstr.charAt(i);
+                if (ch == '\\') {
+                    i++;
+                } else if (ch == '(') {
+                    if (filterstr.startsWith(term, i)) {
+                        return enclosing.indexOf("|") < 0 && enclosing.indexOf("!") < 0;
+                    }
+                    enclosing.append(filterstr.charAt(i + 1));
+                } else if (ch == ')') {
+                    enclosing.setLength(enclosing.length() - 1);
+                }
+            }
+            return false;
         }
 
         private CacheKey(String namespace, String value, String operator) {

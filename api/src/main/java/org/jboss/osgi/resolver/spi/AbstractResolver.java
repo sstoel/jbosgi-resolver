@@ -140,6 +140,15 @@ public class AbstractResolver implements XResolver {
         }
     }
 
+    // An older revision of an updated bundle, that was never resolved, is not resolved any more
+    private static boolean isCurrentRevision(XResource res) {
+        if (res instanceof XBundleRevision) {
+            XBundle bundle = ((XBundleRevision) res).getBundle();
+            return bundle == null || bundle.getBundleRevision() == res;
+        }
+        return true;
+    }
+
     // Append the set of all unresolved resources if there is at least one optional package requirement
     private void appendOptionalHostBundles(XEnvironment env, Collection<? extends Resource> manres, Collection<Resource> optres) {
         for (Resource res : getCombinedResources(manres, optres)) {
@@ -149,7 +158,7 @@ public class AbstractResolver implements XResolver {
                     Iterator<XResource> itres = env.getResources(Collections.singleton(XResource.TYPE_BUNDLE));
                     while (itres.hasNext()) {
                         XResource brev = itres.next();
-                        if (brev.getWiring(false) == null && !manres.contains(brev)) {
+                        if (brev.getWiring(false) == null && !manres.contains(brev) && isCurrentRevision(brev)) {
                             optres.add(brev);
                         }
                     }
