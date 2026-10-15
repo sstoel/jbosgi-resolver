@@ -24,6 +24,7 @@ import static org.jboss.osgi.resolver.ResolverLogger.LOGGER;
 
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
@@ -62,6 +63,13 @@ public class AbstractResolveContext extends XResolveContext {
     @Override
     public List<Capability> findProviders(Requirement req) {
         List<Capability> providers = environment.findProviders(req);
+        // A capability that is not effective:=resolve is not available to the resolver
+        Iterator<Capability> iterator = providers.iterator();
+        while (iterator.hasNext()) {
+            String effective = iterator.next().getDirectives().get(Constants.EFFECTIVE_DIRECTIVE);
+            if (effective != null && effective.equals(Constants.EFFECTIVE_RESOLVE) == false)
+                iterator.remove();
+        }
         Collections.sort(providers, getComparator());
         LOGGER.tracef("Ctx provides: %s => %s", req, providers);
         return providers;

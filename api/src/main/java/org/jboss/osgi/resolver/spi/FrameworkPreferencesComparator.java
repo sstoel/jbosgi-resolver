@@ -51,12 +51,9 @@ class FrameworkPreferencesComparator extends ResourceIndexComparator {
         Resource res1 = o1.getResource();
         Resource res2 = o2.getResource();
 
-        // prefer system bundle
+        // The system bundle is resolved and has the lowest index, it is not preferred over a higher version (3.9.5)
         Long in1 = getResourceIndex((XResource) o1.getResource());
         Long in2 = getResourceIndex((XResource) o2.getResource());
-        if (in1 == 0 || in2 == 0) {
-            return (int)(in1 - in2);
-        }
 
         Map<Resource, Wiring> wirings = getEnvironment().getWirings();
         Wiring w1 = wirings.get(res1);
@@ -70,7 +67,7 @@ class FrameworkPreferencesComparator extends ResourceIndexComparator {
 
         // prefer higher package version
         String ns1 = o1.getNamespace();
-        String ns2 = o1.getNamespace();
+        String ns2 = o2.getNamespace();
         if (PACKAGE_NAMESPACE.equals(ns1) && PACKAGE_NAMESPACE.equals(ns2)) {
             Version v1 = AbstractCapability.getVersion(o1, PackageNamespace.CAPABILITY_VERSION_ATTRIBUTE);
             Version v2 = AbstractCapability.getVersion(o2, PackageNamespace.CAPABILITY_VERSION_ATTRIBUTE);

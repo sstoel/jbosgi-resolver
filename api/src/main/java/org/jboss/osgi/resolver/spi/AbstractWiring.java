@@ -163,6 +163,20 @@ public class AbstractWiring implements XWiring {
     @Override
     public List<Capability> getResourceCapabilities(String namespace) {
 
+        // The wiring of a fragment provides only the identity capability of the fragment, its other capabilities
+        // are provided by the wirings of its hosts
+        if (XResource.TYPE_FRAGMENT.equals(resource.getIdentityCapability().getType())) {
+            List<Capability> result = new ArrayList<Capability>();
+            if (namespace == null || IDENTITY_NAMESPACE.equals(namespace)) {
+                for (Capability cap : resource.getCapabilities(IDENTITY_NAMESPACE)) {
+                    String effdir = cap.getDirectives().get(Namespace.CAPABILITY_EFFECTIVE_DIRECTIVE);
+                    if (effdir == null || effdir.equals(Namespace.EFFECTIVE_RESOLVE))
+                        result.add(cap);
+                }
+            }
+            return Collections.unmodifiableList(result);
+        }
+
         List<Capability> result = new ArrayList<Capability>(resource.getCapabilities(namespace));
         synchronized (this) {
             // Add capabilities from attached fragments
@@ -184,7 +198,6 @@ public class AbstractWiring implements XWiring {
         while (capit.hasNext()) {
             boolean removed = false;
             XCapability cap = (XCapability) capit.next();
-            XResource res = cap.getResource();
 
             // Capabilities with {@link
             // Namespace#CAPABILITY_EFFECTIVE_DIRECTIVE}
@@ -219,12 +232,6 @@ public class AbstractWiring implements XWiring {
                 }
             }
 
-            // Remove identity capability for fragments
-            String type = res.getIdentityCapability().getType();
-            if (!removed && IDENTITY_NAMESPACE.equals(cap.getNamespace()) && XResource.TYPE_FRAGMENT.equals(type)) {
-                capit.remove();
-                removed = true;
-            }
         }
         return Collections.unmodifiableList(result);
     }

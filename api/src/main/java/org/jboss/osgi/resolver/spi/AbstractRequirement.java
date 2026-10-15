@@ -29,6 +29,7 @@ import static org.osgi.framework.namespace.PackageNamespace.RESOLUTION_DYNAMIC;
 import static org.osgi.resource.Namespace.REQUIREMENT_RESOLUTION_DIRECTIVE;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -244,10 +245,7 @@ public class AbstractRequirement extends AbstractElement implements XHostRequire
     }
 
     private boolean matchesResourceRequirement(Capability cap) {
-        // cannot require itself
-        if (getResource() == cap.getResource())
-            return false;
-
+        // A bundle may require itself, the resolver does not wire it to itself
         return matchesMandatoryDirective(cap);
     }
 
@@ -328,7 +326,10 @@ public class AbstractRequirement extends AbstractElement implements XHostRequire
     private void generateFilterDirective(String namespace, Map<String, Object> atts, Map<String, String> dirs) {
         List<String> parts = new ArrayList<String>();
         if (atts.containsKey(namespace)) {
-            addAttributePart(atts, namespace, parts);
+            // The namespace value is a name, a dynamic import may use a wildcard in it
+            Object nsval = atts.remove(namespace);
+            if (nsval instanceof String)
+                parts.add("(" + namespace + "=" + ((String) nsval).trim() + ")");
             addVersionRangePart(atts, Constants.BUNDLE_VERSION_ATTRIBUTE, parts);
             // The deprecated specification-version attribute of an import is a synonym of the version attribute
             if (PACKAGE_NAMESPACE.equals(namespace)) {
@@ -354,11 +355,24 @@ public class AbstractRequirement extends AbstractElement implements XHostRequire
         }
     }
 
+    // The value of a matching attribute is compared string wise, without its leading and trailing white space; the
+    // characters of the filter syntax in it are escaped
     private void addAttributePart(Map<String, Object> atts, String attrname, List<String> parts) {
         Object attrval = atts.remove(attrname);
-        if (attrval instanceof String) {
-            parts.add("(" + attrname + "=" + attrval + ")");
+        if (attrval != null && attrval instanceof Collection == false) {
+            parts.add("(" + attrname + "=" + escapeFilterValue(String.valueOf(attrval).trim()) + ")");
         }
+    }
+
+    private static String escapeFilterValue(String value) {
+        StringBuilder result = new StringBuilder(value.length());
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (c == '\\' || c == '(' || c == ')' || c == '*')
+                result.append('\\');
+            result.append(c);
+        }
+        return result.toString();
     }
 
     private void addVersionRangePart(Map<String, Object> atts, String attrname, List<String> parts) {

@@ -27,7 +27,9 @@ import static org.osgi.framework.namespace.IdentityNamespace.CAPABILITY_TYPE_ATT
 import static org.osgi.framework.namespace.IdentityNamespace.CAPABILITY_VERSION_ATTRIBUTE;
 import static org.osgi.framework.namespace.PackageNamespace.PACKAGE_NAMESPACE;
 
+import java.util.Collection;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.Map;
 
 import org.jboss.osgi.resolver.XAttributeSupport;
@@ -116,17 +118,17 @@ public class AbstractCapability extends AbstractElement implements XIdentityCapa
         if (!valid) {
             if (AbstractResource.identityNamespaces.contains(getNamespace())) {
                 version = getVersion(this, CAPABILITY_VERSION_ATTRIBUTE);
-                namespaceValue = (String) getAttribute(getNamespace());
+                namespaceValue = getNamespaceValue();
                 if (namespaceValue == null)
                     throw MESSAGES.illegalStateCannotObtainAttribute(getNamespace());
             } else if (BUNDLE_NAMESPACE.equals(getNamespace())) {
                 version = getVersion(this, CAPABILITY_BUNDLE_VERSION_ATTRIBUTE);
-                namespaceValue = (String) getAttribute(getNamespace());
+                namespaceValue = getNamespaceValue();
                 if (namespaceValue == null)
                     throw MESSAGES.illegalStateCannotObtainAttribute(getNamespace());
             } else if (HOST_NAMESPACE.equals(getNamespace())) {
                 version = getVersion(this, CAPABILITY_BUNDLE_VERSION_ATTRIBUTE);
-                namespaceValue = (String) getAttribute(getNamespace());
+                namespaceValue = getNamespaceValue();
                 if (namespaceValue == null)
                     throw MESSAGES.illegalStateCannotObtainAttribute(getNamespace());
             } else if (PACKAGE_NAMESPACE.equals(getNamespace())) {
@@ -136,13 +138,23 @@ public class AbstractCapability extends AbstractElement implements XIdentityCapa
                     attributes.getAttributes().put(CAPABILITY_VERSION_ATTRIBUTE, specVersion);
                 version = getVersion(this, CAPABILITY_VERSION_ATTRIBUTE);
                 attributes.getAttributes().put(CAPABILITY_VERSION_ATTRIBUTE, version);
-                namespaceValue = (String) getAttribute(getNamespace());
+                namespaceValue = getNamespaceValue();
                 if (namespaceValue == null)
                     throw MESSAGES.illegalStateCannotObtainAttribute(getNamespace());
             }
             canonicalName = toString();
             valid = true;
         }
+    }
+
+    // The namespace value; a list of names, like the system bundle's name with its alias, gives its first name
+    private String getNamespaceValue() {
+        Object value = getAttribute(getNamespace());
+        if (value instanceof Collection) {
+            Iterator<?> iterator = ((Collection<?>) value).iterator();
+            value = iterator.hasNext() ? iterator.next() : null;
+        }
+        return value != null ? value.toString() : null;
     }
 
     @Override

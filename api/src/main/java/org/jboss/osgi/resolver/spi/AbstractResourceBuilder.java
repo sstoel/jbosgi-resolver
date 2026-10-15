@@ -23,9 +23,12 @@ import static org.jboss.osgi.metadata.OSGiMetaData.ANONYMOUS_BUNDLE_SYMBOLIC_NAM
 import static org.jboss.osgi.resolver.ResolverMessages.MESSAGES;
 
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.jboss.modules.Module;
 import org.jboss.modules.ModuleIdentifier;
@@ -177,6 +180,11 @@ public class AbstractResourceBuilder<T extends XResource> implements XResourceBu
             if (symbolicName == null)
                 symbolicName = ANONYMOUS_BUNDLE_SYMBOLIC_NAME;
 
+            // A bundle with a Bundle-ManifestVersion of 1 (Release 3) is mapped to the module headers of Release 4
+            // (3.18.2): it provides no bundle and host capability, its exports are implicitly imported and use all
+            // the packages that it imports and exports
+            boolean legacy = metadata.getBundleManifestVersion() < 2;
+
             // Identity Capability
             XCapability icap = addIdentityCapability(symbolicName, bundleVersion);
             String identityType = fragmentHost != null ? IdentityNamespace.TYPE_FRAGMENT : IdentityNamespace.TYPE_BUNDLE;
@@ -185,20 +193,20 @@ public class AbstractResourceBuilder<T extends XResource> implements XResourceBu
             icap.getDirectives().putAll(isdirs);
 
             // Bundle Capability
-            if (IdentityNamespace.TYPE_BUNDLE.equals(identityType)) {
+            if (IdentityNamespace.TYPE_BUNDLE.equals(identityType) && legacy == false) {
                 XCapability cap = addCapability(BundleNamespace.BUNDLE_NAMESPACE, symbolicName);
                 cap.getAttributes().put(BundleNamespace.CAPABILITY_BUNDLE_VERSION_ATTRIBUTE, bundleVersion);
                 cap.getAttributes().putAll(idatts);
-                cap.getDirectives().putAll(isdirs);
+                cap.getDirectives().putAll(withoutDirectives(isdirs, AbstractWiringNamespace.CAPABILITY_USES_DIRECTIVE));
             }
 
             // Host Capability
             String fragmentAttachemnt = isdirs.get(HostNamespace.CAPABILITY_FRAGMENT_ATTACHMENT_DIRECTIVE);
-            if (fragmentHost == null && !HostNamespace.FRAGMENT_ATTACHMENT_NEVER.equals(fragmentAttachemnt)) {
+            if (fragmentHost == null && !HostNamespace.FRAGMENT_ATTACHMENT_NEVER.equals(fragmentAttachemnt) && legacy == false) {
                 XCapability cap = addCapability(HostNamespace.HOST_NAMESPACE, symbolicName);
                 cap.getAttributes().put(HostNamespace.CAPABILITY_BUNDLE_VERSION_ATTRIBUTE, bundleVersion);
                 cap.getAttributes().putAll(idatts);
-                cap.getDirectives().putAll(isdirs);
+                cap.getDirectives().putAll(withoutDirectives(isdirs, AbstractWiringNamespace.CAPABILITY_USES_DIRECTIVE));
             }
 
             // Host Requirement
@@ -206,7 +214,7 @@ public class AbstractResourceBuilder<T extends XResource> implements XResourceBu
                 String hostName = fragmentHost.getAttribute();
                 XRequirement req = addRequirement(HostNamespace.HOST_NAMESPACE, hostName);
                 req.getAttributes().putAll(getAttributes(fragmentHost));
-                req.getDirectives().putAll(getDirectives(fragmentHost));
+                req.getDirectives().putAll(withoutDirectives(getDirectives(fragmentHost)));
             }
 
             // Required Bundles
@@ -216,7 +224,7 @@ public class AbstractResourceBuilder<T extends XResource> implements XResourceBu
                     String bundleName = attr.getAttribute();
                     XRequirement req = addRequirement(BundleNamespace.BUNDLE_NAMESPACE, bundleName);
                     req.getAttributes().putAll(getAttributes(attr));
-                    req.getDirectives().putAll(getDirectives(attr));
+                    req.getDirectives().putAll(withoutDirectives(getDirectives(attr)));
                 }
             }
 
@@ -230,12 +238,15 @@ public class AbstractResourceBuilder<T extends XResource> implements XResourceBu
 
             // Export-Package
             List<PackageAttribute> exports = metadata.getExportPackages();
+            List<PackageAttribute> imports = metadata.getImportPackages();
             if (exports != null && !exports.isEmpty()) {
                 for (PackageAttribute attr : exports) {
                     String packageName = attr.getAttribute();
                     XCapability cap = addCapability(PackageNamespace.PACKAGE_NAMESPACE, packageName);
                     cap.getAttributes().putAll(getAttributes(attr));
-                    cap.getDirectives().putAll(getDirectives(attr));
+                    cap.getDirectives().putAll(withoutDirectives(getDirectives(attr)));
+                    if (legacy && cap.getDirectives().containsKey(PackageNamespace.CAPABILITY_USES_DIRECTIVE) == false)
+                        cap.getDirectives().put(PackageNamespace.CAPABILITY_USES_DIRECTIVE, getLegacyUses(exports, imports));
 
                     // Add infered package capability attributes
                     Map<String, Object> capatts = cap.getAttributes();
@@ -247,13 +258,29 @@ public class AbstractResourceBuilder<T extends XResource> implements XResourceBu
             }
 
             // Import-Package
-            List<PackageAttribute> imports = metadata.getImportPackages();
+            Set<String> importedPackages = new HashSet<String>();
             if (imports != null && !imports.isEmpty()) {
                 for (PackageAttribute attr : imports) {
                     String packageName = attr.getAttribute();
                     XRequirement req = addRequirement(PackageNamespace.PACKAGE_NAMESPACE, packageName);
                     req.getAttributes().putAll(getAttributes(attr));
-                    req.getDirectives().putAll(getDirectives(attr));
+                    req.getDirectives().putAll(withoutDirectives(getDirectives(attr)));
+                    importedPackages.add(packageName);
+                }
+            }
+
+            // The exports of a Release 3 bundle are imported with at least the exported version
+            if (legacy && exports != null) {
+                for (PackageAttribute attr : exports) {
+                    String packageName = attr.getAttribute();
+                    if (importedPackages.add(packageName) == false)
+                        continue;
+                    XRequirement req = addRequirement(PackageNamespace.PACKAGE_NAMESPACE, packageName);
+                    Object version = attr.getAttributeValue(Constants.VERSION_ATTRIBUTE, Object.class);
+                    if (version == null)
+                        version = attr.getAttributeValue(Constants.PACKAGE_SPECIFICATION_VERSION, Object.class);
+                    if (version != null)
+                        req.getAttributes().put(PackageNamespace.CAPABILITY_VERSION_ATTRIBUTE, version.toString());
                 }
             }
 
@@ -268,7 +295,8 @@ public class AbstractResourceBuilder<T extends XResource> implements XResourceBu
                     dirs.put(PackageNamespace.REQUIREMENT_RESOLUTION_DIRECTIVE, PackageNamespace.RESOLUTION_DYNAMIC);
                     XRequirement req = addRequirement(PackageNamespace.PACKAGE_NAMESPACE, atts, dirs);
                     req.getAttributes().putAll(getAttributes(attr));
-                    req.getDirectives().putAll(getDirectives(attr));
+                    // A dynamic import is always resolution:=dynamic, a resolution directive of the clause is ignored
+                    req.getDirectives().putAll(withoutDirectives(getDirectives(attr), AbstractWiringNamespace.REQUIREMENT_RESOLUTION_DIRECTIVE));
                 }
             }
 
@@ -370,6 +398,37 @@ public class AbstractResourceBuilder<T extends XResource> implements XResourceBu
             }
         }
         return atts;
+    }
+
+    // The uses directive of an export of a Release 3 bundle: all imported and exported packages
+    private static String getLegacyUses(List<PackageAttribute> exports, List<PackageAttribute> imports) {
+        Set<String> packages = new LinkedHashSet<String>();
+        for (PackageAttribute attr : exports)
+            packages.add(attr.getAttribute());
+        if (imports != null) {
+            for (PackageAttribute attr : imports)
+                packages.add(attr.getAttribute());
+        }
+        StringBuilder result = new StringBuilder();
+        for (String packageName : packages) {
+            if (result.length() > 0)
+                result.append(',');
+            result.append(packageName);
+        }
+        return result.toString();
+    }
+
+    /**
+     * The directives of a clause of a module header without the directives of the generic headers that the module
+     * headers do not recognize (effective, cardinality), and without the given directives
+     */
+    private static Map<String, String> withoutDirectives(Map<String, String> dirs, String... ignored) {
+        Map<String, String> result = new LinkedHashMap<String, String>(dirs);
+        result.remove(AbstractWiringNamespace.CAPABILITY_EFFECTIVE_DIRECTIVE);
+        result.remove(AbstractWiringNamespace.REQUIREMENT_CARDINALITY_DIRECTIVE);
+        for (String name : ignored)
+            result.remove(name);
+        return result;
     }
 
     private Map<String, String> getDirectives(ParameterizedAttribute patts) {

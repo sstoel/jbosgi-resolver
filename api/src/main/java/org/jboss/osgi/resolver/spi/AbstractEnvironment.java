@@ -83,6 +83,10 @@ public class AbstractEnvironment implements XEnvironment, Cloneable {
             resset.addAll(entry.getValue());
         }
         resourceIndexCache.putAll(env.resourceIndexCache);
+        // A resource that is installed into the copy gets an index that is not used yet
+        synchronized (env.resourceIndex) {
+            resourceIndex.set(env.resourceIndex.get());
+        }
     }
 
     @Override
