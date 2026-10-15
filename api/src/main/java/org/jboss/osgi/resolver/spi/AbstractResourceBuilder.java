@@ -297,6 +297,9 @@ public class AbstractResourceBuilder<T extends XResource> implements XResourceBu
                     req.getAttributes().putAll(getAttributes(attr));
                     // A dynamic import is always resolution:=dynamic, a resolution directive of the clause is ignored
                     req.getDirectives().putAll(withoutDirectives(getDirectives(attr), AbstractWiringNamespace.REQUIREMENT_RESOLUTION_DIRECTIVE));
+                    // A wildcard can match several packages (8.3.4)
+                    if (packageName.endsWith("*"))
+                        req.getDirectives().put(AbstractWiringNamespace.REQUIREMENT_CARDINALITY_DIRECTIVE, AbstractWiringNamespace.CARDINALITY_MULTIPLE);
                 }
             }
 

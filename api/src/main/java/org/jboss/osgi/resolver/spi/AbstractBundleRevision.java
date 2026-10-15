@@ -25,6 +25,7 @@ import static org.jboss.osgi.metadata.OSGiMetaData.ANONYMOUS_BUNDLE_SYMBOLIC_NAM
 import java.io.IOException;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Enumeration;
 import java.util.List;
 
@@ -83,7 +84,7 @@ public class AbstractBundleRevision extends AbstractResource implements XBundleR
         for (Capability cap : getCapabilities(namespace)) {
             result.add((BundleCapability) cap);
         }
-        return result;
+        return Collections.unmodifiableList(result);
     }
 
     @Override
@@ -92,7 +93,7 @@ public class AbstractBundleRevision extends AbstractResource implements XBundleR
         for (Requirement req : getRequirements(namespace)) {
             result.add((BundleRequirement) req);
         }
-        return result;
+        return Collections.unmodifiableList(result);
     }
 
     @Override
