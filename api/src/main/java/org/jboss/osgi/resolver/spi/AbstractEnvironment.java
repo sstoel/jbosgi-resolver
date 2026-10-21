@@ -295,7 +295,9 @@ public class AbstractEnvironment implements XEnvironment, Cloneable {
             Collection<BundleCapability> bcaps = new ArrayList<BundleCapability>();
             for (Capability cap : result) {
                 XResource res = (XResource) cap.getResource();
-                if (res.getWiringSupport().getWiring(true) != null || hookregs.hasResource(res)) {
+                // A removal pending revision that is in use still provides its capabilities (fuzz/48), also when the
+                // hooks filter the matches
+                if (res.getWiringSupport().getWiring(true) != null || hookregs.hasResource(res) || isRemovalPendingInUse(res)) {
                     bcaps.add((BundleCapability) cap);
                 }
             }
